@@ -9,7 +9,16 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.seuusuario.controleplacar",
+      "infoPlist": {
+        "NSLocalNetworkUsageDescription": "Precisamos de acesso à rede local para conectar e controlar o placar físico.",
+        "NSBonjourServices": ["_http._tcp.", "_ws._tcp."],
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true,
+          "NSAllowsLocalNetworking": true
+        }
+      }
     },
     "android": {
       "adaptiveIcon": {

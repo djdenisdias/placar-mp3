@@ -383,7 +383,8 @@ void setup() {
   fitaDirUnidade.begin(); fitaDirUnidade.setBrightness(45);
 
   WiFi.mode(WIFI_AP);
-  WiFi.softAP(ssid_ap, password_ap, 1, 0, 1); 
+  WiFi.begin(ssid_ap, password_ap, 1, 0, 1); 
+  // WiFi.softAP(ssid_ap, password_ap, 1, 0, 1); 
 
   webSocket.begin();
   webSocket.onEvent(webSocketEvent);

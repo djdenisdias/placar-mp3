@@ -44,34 +44,34 @@ export default function App() {
   const loopMatchDir = useRef<Animated.CompositeAnimation | null>(null);
   const loopArcoIris = useRef<Animated.CompositeAnimation | null>(null);
 
-  // Dispara a festa de confetes quando o jogo for finalizado
-  useEffect(() => {
-    if (dados.jogoFinalizado) {
-      console.log("🏆 Partida finalizada! Disparando confetes...");
-      canhaoEsquerdo.current?.start();
-      canhaoDireito.current?.start();
-
-      const timerSegundaLeva = setTimeout(() => {
-        canhaoEsquerdo.current?.start();
-        canhaoDireito.current?.start();
-      }, 400);
-
-      return () => clearTimeout(timerSegundaLeva);
-    }
-  }, [dados.jogoFinalizado]);
-
   // Gerenciamento resiliente das conexões WebSockets com Auto-Reconexão
   useEffect(() => {
     let ws: WebSocket | null = null;
     let timerReconexao: ReturnType<typeof setTimeout>;
 
-    const conectarPlacar = () => {
+    const conectarPlacar = async () => {
       console.log("Tentando conectar ao WebSocket do placar...");
+
+      // 🔥 TRUQUE PARA O IOS: Força o ecossistema de rede do iPhone a registrar o IP do Arduino
+      try {
+        await fetch(`http://${IP_PLACAR}`, {
+          method: "GET",
+          mode: "no-cors", // Evita travas de CORS no mobile
+          headers: { "Cache-Control": "no-cache" },
+        });
+        console.log("Ping de aquecimento HTTP enviado ao Arduino com sucesso.");
+      } catch (e) {
+        // Como o Arduino pode não ter um servidor HTTP na porta 80 (apenas o WS na 81),
+        // ele vai dar erro de conexão, mas o iOS JÁ TERÁ REGISTRADO A ROTA LOCAL. Isso basta!
+        console.log("Acordando rota local no iOS...");
+      }
+
+      // Agora abre o WebSocket normalmente
       ws = new WebSocket(WS_URL);
 
       ws.onopen = () => {
         console.log("Conectado com sucesso ao Placar!");
-        wsRef.current = ws; // Salva o canal ativo na referência
+        wsRef.current = ws;
       };
 
       ws.onmessage = (e) => {
@@ -83,8 +83,8 @@ export default function App() {
         }
       };
 
-      ws.onerror = () => {
-        console.log("Erro detectado no WebSocket (Handshake/Rede)");
+      ws.onerror = (e) => {
+        console.log("Erro detectado no WebSocket (Handshake/Rede)", e);
       };
 
       ws.onclose = () => {
@@ -101,6 +101,22 @@ export default function App() {
       clearTimeout(timerReconexao);
     };
   }, []);
+
+  // Dispara a festa de confetes quando o jogo for finalizado
+  useEffect(() => {
+    if (dados.jogoFinalizado) {
+      console.log("🏆 Partida finalizada! Disparando confetes...");
+      canhaoEsquerdo.current?.start();
+      canhaoDireito.current?.start();
+
+      const timerSegundaLeva = setTimeout(() => {
+        canhaoEsquerdo.current?.start();
+        canhaoDireito.current?.start();
+      }, 400);
+
+      return () => clearTimeout(timerSegundaLeva);
+    }
+  }, [dados.jogoFinalizado]);
 
   // Controle dos Loops de Animação (100% JS driver para prevenir crashes no iOS)
   useEffect(() => {
