@@ -1,25 +1,25 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <Adafruit_NeoPixel.h>
-#include <WebSocketsServer.h> // Requer a biblioteca "WebSockets" por Markus Sattler
+#include <WebSocketsServer.h> 
+#include <ArduinoJson.h>      // Adicionada para processar os comandos via WebSocket
 
 // --- CONFIGURAÇÃO DO ACCESS POINT ---
 const char* ssid_ap = "PLACAR_MP3";
 const char* password_ap = "12345678"; 
 
 ESP8266WebServer server(80);
-WebSocketsServer webSocket = WebSocketsServer(81); // Inicializa o WebSocket na porta 81
+WebSocketsServer webSocket = WebSocketsServer(81); 
 
 // --- CONFIGURAÇÃO DOS LEDS ---
 #define NUM_LEDS          21  
 #define LEDS_POR_GRUPO     3  
 #define TOTAL_GRUPOS       7  
 
-// Pinos estáveis mapeados para a Wemos D1 Mini
-#define PIN_ESQ_DEZENA    D5  // Fio Amarelo
-#define PIN_ESQ_UNIDADE   D2  // Fio Verde
-#define PIN_DIR_DEZENA    D6  // Fio Vermelho
-#define PIN_DIR_UNIDADE   D1  // Fio Azul
+#define PIN_ESQ_DEZENA    D5  
+#define PIN_ESQ_UNIDADE   D2  
+#define PIN_DIR_DEZENA    D6  
+#define PIN_DIR_UNIDADE   D1  
 
 Adafruit_NeoPixel fitaEsqDezena(NUM_LEDS, PIN_ESQ_DEZENA, NEO_GRB + NEO_KHZ800);
 Adafruit_NeoPixel fitaEsqUnidade(NUM_LEDS, PIN_ESQ_UNIDADE, NEO_GRB + NEO_KHZ800);
@@ -33,13 +33,11 @@ int ultimoAMarcar = 0;
 bool jogoFinalizado = false;
 int vencedor = 0;      
 
-// Histórico de renderização inteligente (Anti-Ruído)
 int ultNumEsqDez = -1, ultNumEsqUni = -1;
 int ultNumDirDez = -1, ultNumDirUni = -1;
 uint32_t ultCorEsqDez = 0, ultCorEsqUni = 0;
 uint32_t ultCorDirDez = 0, ultCorDirUni = 0;
 
-// Timers (Millis)
 unsigned long tempoPiscadaPontos = 0;
 bool piscandoEsq = false, piscandoDir = false;
 unsigned long tempoMatchPoint = 0;
@@ -47,24 +45,19 @@ bool estadoMatchPointPisca = true;
 unsigned long tempoArcoIris = 0;
 uint16_t pixelHueArcoIris = 0;
 
-// Estado de Conexão Wi-Fi
 bool alguemConectadoAnteriormente = false;
 
-// Controle de Chamas Otimizado
 byte calorEsq[NUM_LEDS];
 byte calorDir[NUM_LEDS];
 unsigned long tempoFogo = 0;
 
-// Animação de Espera (Piscar LEDs Fixos)
 unsigned long tempoPiscaEspera = 0;
 bool estadoLedsEspera = false; 
 const int ledsParaPiscar[] = {5, 6, 8, 9, 14, 15, 17, 18};
 const int qtdLedsParaPiscar = sizeof(ledsParaPiscar) / sizeof(ledsParaPiscar[0]);
 
-// Timer de broadcast estruturado para limitar tráfego do WebSocket em efeitos contínuos
 unsigned long tempoUltimoBroadcastEfeito = 0;
 
-// Matriz lógica dos números (0 a 9)
 const byte mapeamentoNumeros[10][TOTAL_GRUPOS] = {
   {0, 1, 1, 1, 1, 1, 1}, {0, 1, 0, 0, 0, 0, 1}, {1, 1, 1, 0, 1, 1, 0},
   {1, 1, 1, 0, 0, 1, 1}, {1, 1, 0, 1, 0, 0, 1}, {1, 0, 1, 1, 0, 1, 1},
@@ -72,7 +65,6 @@ const byte mapeamentoNumeros[10][TOTAL_GRUPOS] = {
   {1, 1, 1, 1, 0, 1, 1}
 };
 
-// --- TRANSMISSOR DE ESTADO VIA WEBSOCKET (REAL-TIME SYNC) ---
 void transmitirEstadoGeral() {
   bool esqEmMatch = (pontosEsq >= 14 && pontosEsq > pontosDir && !jogoFinalizado);
   bool dirEmMatch = (pontosDir >= 14 && pontosDir > pontosEsq && !jogoFinalizado);
@@ -89,12 +81,12 @@ void transmitirEstadoGeral() {
   webSocket.broadcastTXT(json);
 }
 
-// --- RENDERIZADOR INTELIGENTE ---
 void renderizarDigitoIntel(Adafruit_NeoPixel &fita, int numero, uint32_t cor, int &ultNum, uint32_t &ultCor, bool forcarRefresh = false) {
   if (!forcarRefresh && (numero == ultNum) && (cor == ultCor)) {
     return; 
   }
   
+  max(0,1); // Dummy expression safe for compiler
   ultNum = numero;
   ultCor = cor;
   
@@ -102,9 +94,10 @@ void renderizarDigitoIntel(Adafruit_NeoPixel &fita, int numero, uint32_t cor, in
   if (numero >= 0 && numero <= 9) {
     for (int grupo = 0; grupo < TOTAL_GRUPOS; grupo++) {
       if (mapeamentoNumeros[numero][grupo] == 1) {
-        int ledInicial = grupo * LEDS_POR_GRUPO;
-        int ledFinal = ledInicial + LEDS_POR_GRUPO;
-        for (int i = ledInicial; i < ledFinal; i++) {
+        int ledInicial = grupo * LEDS_POR_GRUPO; // Note: using grouping calculation
+        int ledInicialCalculado = grupo * LEDS_POR_GRUPO;
+        int ledFinal = ledInicialCalculado + LEDS_POR_GRUPO;
+        for (int i = ledInicialCalculado; i < ledFinal; i++) {
           fita.setPixelColor(i, cor);
         }
       }
@@ -121,7 +114,6 @@ void resetarCacheRender() {
   ultCorDirDez = 0;  ultCorDirUni = 0;
 }
 
-// --- ANIMAÇÃO DE INTRODUÇÃO ---
 void executarIntroConexao() {
   uint32_t corVerde = fitaEsqUnidade.Color(0, 255, 0);
   uint32_t corApagada = fitaEsqUnidade.Color(0, 0, 0);
@@ -152,7 +144,6 @@ void executarIntroConexao() {
   transmitirEstadoGeral();
 }
 
-// --- ANIMAÇÃO DE ESPERA FIXA OTIMIZADA ---
 void rodarAnimacaoEsperaFixa() {
   unsigned long tempoAtual = millis();
   if (tempoAtual - tempoPiscaEspera >= 500) { 
@@ -213,11 +204,9 @@ void processarFogoNoDigito(Adafruit_NeoPixel &fita, byte *calorArray, int numero
   fita.show();
 }
 
-// --- GERENCIADOR PRINCIPAL VISUAL DO PLACAR (COM PRIORIDADE DE MATCH POINT) ---
 void gerenciarEfeitosEVisores() {
   unsigned long tempoAtual = millis();
 
-  // Efeito Arco-Íris de Vitória
   if (jogoFinalizado) {
     if (tempoAtual - tempoArcoIris >= 15) {
       tempoArcoIris = tempoAtual;
@@ -266,13 +255,11 @@ void gerenciarEfeitosEVisores() {
   bool fogoEsqAtivo = (consecutivasEsq >= 3 && !aplicandoPiscadaEsq);
   bool fogoDirAtivo = (consecutivasDir >= 3 && !aplicandoPiscadaDir);
 
-  // Sincroniza estado de animação com o app caso o ciclo mude
   if (mudouEstadoPisca && (tempoAtual - tempoUltimoBroadcastEfeito > 100)) {
     tempoUltimoBroadcastEfeito = tempoAtual;
     transmitirEstadoGeral();
   }
 
-  // Renderização Esquerda
   if (esqEmMatch && !estadoMatchPointPisca && !aplicandoPiscadaEsq) {
     fitaEsqDezena.clear(); fitaEsqUnidade.clear();
     fitaEsqDezena.show();  fitaEsqUnidade.show();
@@ -290,7 +277,6 @@ void gerenciarEfeitosEVisores() {
     renderizarDigitoIntel(fitaEsqUnidade, pontosEsq % 10, corEsq, ultNumEsqUni, ultCorEsqUni);
   }
 
-  // Renderização Direita
   if (dirEmMatch && !estadoMatchPointPisca && !aplicandoPiscadaDir) {
     fitaDirDezena.clear(); fitaDirUnidade.clear();
     fitaDirDezena.show();  fitaDirUnidade.show();
@@ -320,20 +306,9 @@ void checarRegrasDeVitoria() {
   else if (pontosDir >= 15 && (pontosDir - pontosEsq) >= 2) { jogoFinalizado = true; vencedor = 2; }
 }
 
-void handleStatus() {
-  server.sendHeader("Access-Control-Allow-Origin", "*");
-  transmitirEstadoGeral();
-  server.send(200, "application/json", "{\"status\":\"OK\"}");
-}
-
-void handleControle() {
-  server.sendHeader("Access-Control-Allow-Origin", "*");
-  if (!server.hasArg("lado") || !server.hasArg("acao")) { server.send(400, "text/plain", "Erro"); return; }
-
-  String lado = server.arg("lado");
-  String acao = server.arg("acao");
-
-  if (jogoFinalizado && lado != "reset") { server.send(200, "text/plain", "Bloqueado"); return; }
+// Lógica de processamento centralizada (Chamada internamente pelo WebSocket ou HTTP)
+void executarComandoLozico(String lado, String acao) {
+  if (jogoFinalizado && lado != "reset") return;
   unsigned long tempoAtual = millis();
 
   if (lado == "esq") {
@@ -359,15 +334,42 @@ void handleControle() {
     resetarCacheRender();
   }
   checarRegrasDeVitoria();
-  server.send(200, "text/plain", "OK");
-  
-  transmitirEstadoGeral(); // Dispara atualização imediata em broadcast via WebSocket
+  transmitirEstadoGeral();
 }
 
-// Manipulador de conexões de clientes WebSockets
+void handleStatus() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  transmitirEstadoGeral();
+  server.send(200, "application/json", "{\"status\":\"OK\"}");
+}
+
+void handleControle() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  if (!server.hasArg("lado") || !server.hasArg("acao")) { server.send(400, "text/plain", "Erro"); return; }
+  executarComandoLozico(server.arg("lado"), server.arg("acao"));
+  server.send(200, "text/plain", "OK");
+}
+
+// Manipulador unificado de eventos WebSocket (Lê os comandos JSON do PWA)
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length) {
-  if (type == WStype_CONNECTED) {
-    transmitirEstadoGeral(); // Envia o snapshot imediato do placar assim que o app conecta
+  switch (type) {
+    case WStype_CONNECTED:
+      transmitirEstadoGeral(); 
+      break;
+      
+    case WStype_TEXT: {
+      StaticJsonDocument<200> doc;
+      DeserializationError erro = deserializeJson(doc, payload);
+      
+      if (!erro && doc.containsKey("comando")) {
+        String lado = doc["lado"];
+        String acao = doc["acao"];
+        executarComandoLozico(lado, acao);
+      }
+      break;
+    }
+    default:
+      break;
   }
 }
 
@@ -383,7 +385,6 @@ void setup() {
   WiFi.mode(WIFI_AP);
   WiFi.softAP(ssid_ap, password_ap, 1, 0, 1); 
 
-  // Inicializa o WebSocket e associa o manipulador de eventos
   webSocket.begin();
   webSocket.onEvent(webSocketEvent);
 
@@ -393,7 +394,7 @@ void setup() {
 }
 
 void loop() {
-  webSocket.loop(); // Escuta pacotes e gerencia requisições WebSocket
+  webSocket.loop(); 
   server.handleClient();
 
   int dispositivosConectados = WiFi.softAPgetStationNum();
@@ -408,9 +409,7 @@ void loop() {
       executarIntroConexao(); 
       alguemConectadoAnteriormente = true;
     }
-    
     gerenciarEfeitosEVisores();
   }
-  
   delay(1); 
 }

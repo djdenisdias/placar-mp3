@@ -12,7 +12,6 @@ import {
 import ConfettiCannon from "react-native-confetti-cannon";
 
 const IP_PLACAR = "192.168.4.1";
-const API_URL = `http://${IP_PLACAR}`;
 const WS_URL = `ws://${IP_PLACAR}:81`;
 
 export default function App() {
@@ -23,12 +22,17 @@ export default function App() {
     vencedor: 0,
   });
 
+  // Instância do WebSocket mantida em referência estável para uso global
+  const wsRef = useRef<WebSocket | null>(null);
+  const enviandoComando = useRef(false);
+
   // Referências para as animações nativas
   const animFogoEsq = useRef(new Animated.Value(0)).current;
   const animFogoDir = useRef(new Animated.Value(0)).current;
   const animMatchEsq = useRef(new Animated.Value(1)).current;
   const animMatchDir = useRef(new Animated.Value(1)).current;
   const animArcoIris = useRef(new Animated.Value(0)).current;
+
   // Referências para controlar o disparo dos canhões de confete
   const canhaoEsquerdo = useRef<any>(null);
   const canhaoDireito = useRef<any>(null);
@@ -44,13 +48,9 @@ export default function App() {
   useEffect(() => {
     if (dados.jogoFinalizado) {
       console.log("🏆 Partida finalizada! Disparando confetes...");
-
-      // Simula o efeito de rajadas contínuas (interval) que você mandou do script original
-      // Dispara a primeira leva imediatamente
       canhaoEsquerdo.current?.start();
       canhaoDireito.current?.start();
 
-      // Dispara uma segunda leva 400ms depois para dar volume e variação física
       const timerSegundaLeva = setTimeout(() => {
         canhaoEsquerdo.current?.start();
         canhaoDireito.current?.start();
@@ -63,7 +63,7 @@ export default function App() {
   // Gerenciamento resiliente das conexões WebSockets com Auto-Reconexão
   useEffect(() => {
     let ws: WebSocket | null = null;
-    let timerReconexao: any;
+    let timerReconexao: ReturnType<typeof setTimeout>;
 
     const conectarPlacar = () => {
       console.log("Tentando conectar ao WebSocket do placar...");
@@ -71,6 +71,7 @@ export default function App() {
 
       ws.onopen = () => {
         console.log("Conectado com sucesso ao Placar!");
+        wsRef.current = ws; // Salva o canal ativo na referência
       };
 
       ws.onmessage = (e) => {
@@ -82,12 +83,13 @@ export default function App() {
         }
       };
 
-      ws.onerror = (e) => {
+      ws.onerror = () => {
         console.log("Erro detectado no WebSocket (Handshake/Rede)");
       };
 
       ws.onclose = () => {
         console.log("Conexão fechada. Tentando nova conexão em 2s...");
+        wsRef.current = null;
         timerReconexao = setTimeout(conectarPlacar, 2000);
       };
     };
@@ -100,8 +102,7 @@ export default function App() {
     };
   }, []);
 
-  // Controle controlado dos Loops de Animação (Corrigido conflito de drivers)
-  // Controle controlado dos Loops de Animação (Consertado definitivamente para evitar crashes no iOS)
+  // Controle dos Loops de Animação (100% JS driver para prevenir crashes no iOS)
   useEffect(() => {
     // 1. Efeito Chamas (Fogo) - Esquerda
     if (dados.esquerda.fogo) {
@@ -157,7 +158,7 @@ export default function App() {
       animFogoDir.setValue(0);
     }
 
-    // 3. Efeito Match Point (Pisca) - Esquerda (useNativeDriver desativado)
+    // 3. Efeito Match Point (Pisca) - Esquerda
     if (dados.esquerda.match) {
       if (!loopMatchEsq.current) {
         loopMatchEsq.current = Animated.loop(
@@ -184,7 +185,7 @@ export default function App() {
       animMatchEsq.setValue(1);
     }
 
-    // 4. Efeito Match Point (Pisca) - Direita (useNativeDriver desativado)
+    // 4. Efeito Match Point (Pisca) - Direita
     if (dados.direita.match) {
       if (!loopMatchDir.current) {
         loopMatchDir.current = Animated.loop(
@@ -211,7 +212,7 @@ export default function App() {
       animMatchDir.setValue(1);
     }
 
-    // 5. Efeito Vitória (Arco-Íris Hue Rotate) (useNativeDriver desativado)
+    // 5. Efeito Vitória (Arco-Íris)
     if (dados.jogoFinalizado) {
       if (!loopArcoIris.current) {
         loopArcoIris.current = Animated.loop(
@@ -232,34 +233,30 @@ export default function App() {
     }
   }, [dados]);
 
-  const enviandoComando = useRef(false);
-  // Envia os comandos de alteração via HTTP (Rápido e sem overhead)
-  const enviarComando = async (lado: string, acao: string) => {
-    // Se já houver um comando sendo processado no intervalo de 500ms, ignora o clique
+  // Despacha os comandos empacotados por dentro do canal ativo de WebSocket (Ignora regras de CORS)
+  const enviarComando = (lado: string, acao: string) => {
     if (enviandoComando.current) {
-      console.log("Comando bloqueado para evitar sobrecarga na placa.");
+      console.log("Comando bloqueado para evitar sobrecarga.");
       return;
     }
 
-    try {
-      // Ativa a trava imediatamente
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       enviandoComando.current = true;
 
-      // Dispara a requisição para a placa
-      await fetch(`${API_URL}/controlar?lado=${lado}&acao=${acao}`);
-    } catch (error) {
-      console.log("Erro ao enviar comando:", error);
-    } finally {
-      // Libera o botão após exatamente 500ms (meio segundo)
+      const payload = JSON.stringify({ comando: true, lado, acao });
+      wsRef.current.send(payload);
+
       setTimeout(() => {
         enviandoComando.current = false;
       }, 500);
+    } else {
+      console.log("WebSocket desconectado. Não foi possível processar.");
     }
   };
 
   const formatarNumero = (num: number) => (num < 10 ? `0${num}` : num);
 
-  // Interpolações de Cores para Efeitos Visuais
+  // Interpolações de Cores
   const corDeFundoFogoEsq = animFogoEsq.interpolate({
     inputRange: [0, 1],
     outputRange: ["rgba(255, 77, 77, 0.15)", "rgba(255, 165, 0, 0.4)"],
@@ -386,14 +383,14 @@ export default function App() {
       >
         <Text style={styles.txtReset}>ZERAR PLACAR</Text>
       </TouchableOpacity>
+
       {/* CANHÕES DE CONFETE NATIVOS */}
       {dados.jogoFinalizado && (
         <>
-          {/* Canhão disparando do canto inferior esquerdo para cima/direita */}
           <ConfettiCannon
             ref={canhaoEsquerdo}
             count={60}
-            origin={{ x: -10, y: 400 }} // Fora da tela à esquerda, meia altura
+            origin={{ x: -10, y: 400 }}
             autoStart={false}
             fadeOut={true}
             fallSpeed={2500}
@@ -401,11 +398,10 @@ export default function App() {
             colors={["#ff4d4d", "#ffaa00", "#fff"]}
           />
 
-          {/* Canhão disparando do canto inferior direito para cima/esquerda */}
           <ConfettiCannon
             ref={canhaoDireito}
             count={60}
-            origin={{ x: 400, y: 400 }} // Fora da tela à direita, meia altura
+            origin={{ x: 400, y: 400 }}
             autoStart={false}
             fadeOut={true}
             fallSpeed={2500}
