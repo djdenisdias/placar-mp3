@@ -4,7 +4,7 @@
     "slug": "PlacarMP3",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/icon.png",
     "scheme": "placarmp3",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -13,33 +13,40 @@
       "bundleIdentifier": "com.seuusuario.controleplacar",
       "infoPlist": {
         "NSLocalNetworkUsageDescription": "Precisamos de acesso à rede local para conectar e controlar o placar físico.",
-        "NSBonjourServices": ["_http._tcp.", "_ws._tcp."],
+        "NSBonjourServices": [
+          "_http._tcp.",
+          "_ws._tcp."
+        ],
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true,
           "NSAllowsLocalNetworking": true
         }
       }
     },
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#121212"
+    },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#007D77"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.denisdias.placarmp3"
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png",
+      "favicon": "./assets/icon.png",
       "pwa": {
         "enabled": true,
         "name": "Controle de Placar",
         "shortName": "PlacarMP3",
         "description": "Controle remoto via Wi-Fi para o placar de LED",
-        "themeColor": "#121212",
-        "backgroundColor": "#121212",
+        "themeColor": "#007D77",
+        "backgroundColor": "#007D77",
         "display": "standalone",
         "orientation": "portrait",
         "icon": "./assets/icon.png"
@@ -50,7 +57,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/splash.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",
@@ -63,6 +70,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "ee7a500f-a79d-40c4-b76f-5050bcd3ca73"
+      }
     }
   }
 }
