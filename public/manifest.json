@@ -1,0 +1,16 @@
+{
+  "short_name": "Placar",
+  "name": "Controle de Placar MP3",
+  "icons": [
+    {
+      "src": "favicon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ],
+  "start_url": ".",
+  "background_color": "#121212",
+  "theme_color": "#ff4d4d",
+  "display": "standalone",
+  "orientation": "portrait"
+}

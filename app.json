@@ -23,7 +23,18 @@
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/favicon.png",
+      "pwa": {
+        "enabled": true,
+        "name": "Controle de Placar",
+        "shortName": "PlacarMP3",
+        "description": "Controle remoto via Wi-Fi para o placar de LED",
+        "themeColor": "#121212",
+        "backgroundColor": "#121212",
+        "display": "standalone",
+        "orientation": "portrait",
+        "icon": "./assets/icon.png"
+      }
     },
     "plugins": [
       "expo-router",
