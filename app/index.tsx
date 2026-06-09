@@ -309,15 +309,9 @@ export default function App() {
       <Stack.Screen options={{ headerShown: false }} />
       <StatusBar barStyle='light-content' />
 
-      <Text style={styles.titulo}>CONTROLE DO PLACAR</Text>
-
       <View style={styles.placarContainer}>
         {/* CONTROLE ESQUERDA (VERMELHO) */}
         <View style={styles.colunaControle}>
-          <Text style={[styles.labelTime, { color: "#ff4d4d" }]}>
-            {dados.esquerda.match ? "MATCH POINT" : "ESQUERDA"}
-          </Text>
-
           <TouchableOpacity
             style={[styles.botaoMaisMenos, { backgroundColor: "#ff4d4d" }]}
             onPress={() => enviarComando("esq", "mais")}
@@ -354,10 +348,6 @@ export default function App() {
 
         {/* CONTROLE DIREITA (AZUL) */}
         <View style={styles.colunaControle}>
-          <Text style={[styles.labelTime, { color: "#3399ff" }]}>
-            {dados.direita.match ? "MATCH POINT" : "DIREITA"}
-          </Text>
-
           <TouchableOpacity
             style={[styles.botaoMaisMenos, { backgroundColor: "#3399ff" }]}
             onPress={() => enviarComando("dir", "mais")}
@@ -435,14 +425,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#121212",
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "center",
     paddingVertical: 50,
-  },
-  titulo: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#fff",
-    letterSpacing: 2,
   },
   placarContainer: {
     flexDirection: "row",
@@ -505,6 +489,8 @@ const styles = StyleSheet.create({
     borderRadius: 25,
     borderWidth: 1,
     borderColor: "#444",
+    position: "absolute",
+    bottom: 100,
   },
   txtReset: {
     color: "#aaa",

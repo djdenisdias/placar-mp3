@@ -16,10 +16,10 @@ WebSocketsServer webSocket = WebSocketsServer(81);
 #define LEDS_POR_GRUPO     3  
 #define TOTAL_GRUPOS       7  
 
-#define PIN_ESQ_DEZENA    D5  
-#define PIN_ESQ_UNIDADE   D2  
-#define PIN_DIR_DEZENA    D6  
-#define PIN_DIR_UNIDADE   D1  
+#define PIN_ESQ_DEZENA    D5 //amarelo  
+#define PIN_ESQ_UNIDADE   D2 //verde 
+#define PIN_DIR_DEZENA    D6 //vermelho 
+#define PIN_DIR_UNIDADE   D1 //azul 
 
 Adafruit_NeoPixel fitaEsqDezena(NUM_LEDS, PIN_ESQ_DEZENA, NEO_GRB + NEO_KHZ800);
 Adafruit_NeoPixel fitaEsqUnidade(NUM_LEDS, PIN_ESQ_UNIDADE, NEO_GRB + NEO_KHZ800);
@@ -377,14 +377,13 @@ void setup() {
   WiFi.persistent(false); 
   WiFi.disconnect(true);
   
-  fitaEsqDezena.begin();  fitaEsqDezena.setBrightness(45);
-  fitaEsqUnidade.begin(); fitaEsqUnidade.setBrightness(45);
-  fitaDirDezena.begin();  fitaDirDezena.setBrightness(45);
-  fitaDirUnidade.begin(); fitaDirUnidade.setBrightness(45);
+  fitaEsqDezena.begin();  fitaEsqDezena.setBrightness(100);
+  fitaEsqUnidade.begin(); fitaEsqUnidade.setBrightness(100);
+  fitaDirDezena.begin();  fitaDirDezena.setBrightness(100);
+  fitaDirUnidade.begin(); fitaDirUnidade.setBrightness(100);
 
   WiFi.mode(WIFI_AP);
-  WiFi.begin(ssid_ap, password_ap, 1, 0, 1); 
-  // WiFi.softAP(ssid_ap, password_ap, 1, 0, 1); 
+  WiFi.softAP(ssid_ap, password_ap, 1, 0, 1); 
 
   webSocket.begin();
   webSocket.onEvent(webSocketEvent);
