@@ -338,16 +338,56 @@ void executarComandoLozico(String lado, String acao) {
 }
 
 void handleStatus() {
+  // Libera acesso para qualquer origem (inclusive o app rodando na Vercel)
   server.sendHeader("Access-Control-Allow-Origin", "*");
-  transmitirEstadoGeral();
-  server.send(200, "application/json", "{\"status\":\"OK\"}");
+  server.sendHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  server.sendHeader("Access-Control-Allow-Headers", "*");
+  
+  bool esqEmMatch = (pontosEsq >= 14 && pontosEsq > pontosDir && !jogoFinalizado);
+  bool dirEmMatch = (pontosDir >= 14 && pontosDir > pontosEsq && !jogoFinalizado);
+  bool fogoEsqAtivo = (consecutivasEsq >= 3 && !jogoFinalizado);
+  bool fogoDirAtivo = (consecutivasDir >= 3 && !jogoFinalizado);
+
+  String json = "{";
+  json += "\"esquerda\":{\"pontos\":" + String(pontosEsq) + ",\"fogo\":" + String(fogoEsqAtivo ? "true" : "false") + ",\"match\":" + String(esqEmMatch ? "true" : "false") + "},";
+  json += "\"direita\":{\"pontos\":" + String(pontosDir) + ",\"fogo\":" + String(fogoDirAtivo ? "true" : "false") + ",\"match\":" + String(dirEmMatch ? "true" : "false") + "},";
+  json += "\"jogoFinalizado\":" + String(jogoFinalizado ? "true" : "false") + ",";
+  json += "\"vencedor\":" + String(vencedor);
+  json += "}";
+
+  server.send(200, "application/json", json);
 }
 
 void handleControle() {
+  // Cabeçalhos de segurança cruciais para o PWA do iOS aceitar a resposta
   server.sendHeader("Access-Control-Allow-Origin", "*");
-  if (!server.hasArg("lado") || !server.hasArg("acao")) { server.send(400, "text/plain", "Erro"); return; }
+  server.sendHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  server.sendHeader("Access-Control-Allow-Headers", "*");
+  
+  if (!server.hasArg("lado") || !server.hasArg("acao")) { 
+    server.send(400, "text/plain", "Erro: Argumentos ausentes"); 
+    return; 
+  }
+
+  // 1. Executa a lógica física (muda os LEDs)
   executarComandoLozico(server.arg("lado"), server.arg("acao"));
-  server.send(200, "text/plain", "OK");
+
+  // 2. Calcula os estados visuais para devolver ao App na resposta
+  bool esqEmMatch = (pontosEsq >= 14 && pontosEsq > pontosDir && !jogoFinalizado);
+  bool dirEmMatch = (pontosDir >= 14 && pontosDir > pontosEsq && !jogoFinalizado);
+  bool fogoEsqAtivo = (consecutivasEsq >= 3 && !jogoFinalizado);
+  bool fogoDirAtivo = (consecutivasDir >= 3 && !jogoFinalizado);
+
+  // 3. Monta o JSON atualizado do jogo
+  String json = "{";
+  json += "\"esquerda\":{\"pontos\":" + String(pontosEsq) + ",\"fogo\":" + String(fogoEsqAtivo ? "true" : "false") + ",\"match\":" + String(esqEmMatch ? "true" : "false") + "},";
+  json += "\"direita\":{\"pontos\":" + String(pontosDir) + ",\"fogo\":" + String(fogoDirAtivo ? "true" : "false") + ",\"match\":" + String(dirEmMatch ? "true" : "false") + "},";
+  json += "\"jogoFinalizado\":" + String(jogoFinalizado ? "true" : "false") + ",";
+  json += "\"vencedor\":" + String(vencedor);
+  json += "}";
+
+  // 4. Envia os dados novos direto na resposta do clique
+  server.send(200, "application/json", json);
 }
 
 // Manipulador unificado de eventos WebSocket (Lê os comandos JSON do PWA)
@@ -390,6 +430,12 @@ void setup() {
 
   server.on("/status", HTTP_GET, handleStatus);
   server.on("/controlar", HTTP_GET, handleControle);
+  server.on("/controlar", HTTP_OPTIONS, []() {
+    server.sendHeader("Access-Control-Allow-Origin", "*");
+    server.sendHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    server.sendHeader("Access-Control-Allow-Headers", "*");
+    server.send(200, "text/plain", "");
+  });
   server.begin();
 }
 

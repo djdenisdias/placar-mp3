@@ -12,7 +12,7 @@ import {
 import ConfettiCannon from "react-native-confetti-cannon";
 
 const IP_PLACAR = "192.168.4.1";
-const WS_URL = `ws://${IP_PLACAR}:81`;
+const API_URL = `http://${IP_PLACAR}`;
 
 export default function App() {
   const [dados, setDados] = useState({
@@ -22,8 +22,6 @@ export default function App() {
     vencedor: 0,
   });
 
-  // Instância do WebSocket mantida em referência estável para uso global
-  const wsRef = useRef<WebSocket | null>(null);
   const enviandoComando = useRef(false);
 
   // Referências para as animações nativas
@@ -37,70 +35,12 @@ export default function App() {
   const canhaoEsquerdo = useRef<any>(null);
   const canhaoDireito = useRef<any>(null);
 
-  // Guardas para controlar se as animações em loop já estão rodando (Evita estouro de memória)
+  // Guardas para controlar se as animações em loop já estão rodando
   const loopFogoEsq = useRef<Animated.CompositeAnimation | null>(null);
   const loopFogoDir = useRef<Animated.CompositeAnimation | null>(null);
   const loopMatchEsq = useRef<Animated.CompositeAnimation | null>(null);
   const loopMatchDir = useRef<Animated.CompositeAnimation | null>(null);
   const loopArcoIris = useRef<Animated.CompositeAnimation | null>(null);
-
-  // Gerenciamento resiliente das conexões WebSockets com Auto-Reconexão
-  useEffect(() => {
-    let ws: WebSocket | null = null;
-    let timerReconexao: ReturnType<typeof setTimeout>;
-
-    const conectarPlacar = async () => {
-      console.log("Tentando conectar ao WebSocket do placar...");
-
-      // 🔥 TRUQUE PARA O IOS: Força o ecossistema de rede do iPhone a registrar o IP do Arduino
-      try {
-        await fetch(`http://${IP_PLACAR}`, {
-          method: "GET",
-          mode: "no-cors", // Evita travas de CORS no mobile
-          headers: { "Cache-Control": "no-cache" },
-        });
-        console.log("Ping de aquecimento HTTP enviado ao Arduino com sucesso.");
-      } catch (e) {
-        // Como o Arduino pode não ter um servidor HTTP na porta 80 (apenas o WS na 81),
-        // ele vai dar erro de conexão, mas o iOS JÁ TERÁ REGISTRADO A ROTA LOCAL. Isso basta!
-        console.log("Acordando rota local no iOS...");
-      }
-
-      // Agora abre o WebSocket normalmente
-      ws = new WebSocket(WS_URL);
-
-      ws.onopen = () => {
-        console.log("Conectado com sucesso ao Placar!");
-        wsRef.current = ws;
-      };
-
-      ws.onmessage = (e) => {
-        try {
-          const payload = JSON.parse(e.data);
-          setDados(payload);
-        } catch (err) {
-          console.log("Erro ao parsear dados do WebSocket", err);
-        }
-      };
-
-      ws.onerror = (e) => {
-        console.log("Erro detectado no WebSocket (Handshake/Rede)", e);
-      };
-
-      ws.onclose = () => {
-        console.log("Conexão fechada. Tentando nova conexão em 2s...");
-        wsRef.current = null;
-        timerReconexao = setTimeout(conectarPlacar, 2000);
-      };
-    };
-
-    conectarPlacar();
-
-    return () => {
-      if (ws) ws.close();
-      clearTimeout(timerReconexao);
-    };
-  }, []);
 
   // Dispara a festa de confetes quando o jogo for finalizado
   useEffect(() => {
@@ -118,9 +58,57 @@ export default function App() {
     }
   }, [dados.jogoFinalizado]);
 
-  // Controle dos Loops de Animação (100% JS driver para prevenir crashes no iOS)
+  // 1. Carrega o estado atual do placar APENAS UMA VEZ ao abrir o app
   useEffect(() => {
-    // 1. Efeito Chamas (Fogo) - Esquerda
+    const carregarEstadoInicial = async () => {
+      try {
+        const resposta = await fetch(`${API_URL}/status`, {
+          method: "GET",
+          headers: { "Cache-Control": "no-cache" },
+        });
+        if (resposta.ok) {
+          const json = await resposta.json();
+          setDados(json);
+        }
+      } catch (err) {
+        console.log("Aguardando conexão Wi-Fi com o placar físico...");
+      }
+    };
+    carregarEstadoInicial();
+  }, []);
+
+  // 2. Envia a ação e captura o estado atualizado imediatamente na resposta (Sem Polling!)
+  const enviarComando = async (lado: string, acao: string) => {
+    if (enviandoComando.current) return;
+    enviandoComando.current = true;
+
+    try {
+      const resposta = await fetch(
+        `${API_URL}/controlar?lado=${lado}&acao=${acao}`,
+        {
+          method: "GET",
+          mode: "cors", // Permite a leitura do JSON retornado no PWA do iOS
+        },
+      );
+
+      if (resposta.ok) {
+        const jsonAtualizado = await resposta.json();
+        // Sincroniza o estado do app com o retorno real do Arduino
+        setDados(jsonAtualizado);
+        console.log(`Sucesso: ${lado} -> ${acao}`, jsonAtualizado);
+      }
+    } catch (err) {
+      console.log("Erro ao processar comando via HTTP:", err);
+    } finally {
+      setTimeout(() => {
+        enviandoComando.current = false;
+      }, 200); // Evita cliques duplicados acidentais
+    }
+  };
+
+  // Controle dos Loops de Animação
+  useEffect(() => {
+    // Efeito Chamas (Fogo) - Esquerda
     if (dados.esquerda.fogo) {
       if (!loopFogoEsq.current) {
         loopFogoEsq.current = Animated.loop(
@@ -147,7 +135,7 @@ export default function App() {
       animFogoEsq.setValue(0);
     }
 
-    // 2. Efeito Chamas (Fogo) - Direita
+    // Efeito Chamas (Fogo) - Direita
     if (dados.direita.fogo) {
       if (!loopFogoDir.current) {
         loopFogoDir.current = Animated.loop(
@@ -174,7 +162,7 @@ export default function App() {
       animFogoDir.setValue(0);
     }
 
-    // 3. Efeito Match Point (Pisca) - Esquerda
+    // Efeito Match Point (Pisca) - Esquerda
     if (dados.esquerda.match) {
       if (!loopMatchEsq.current) {
         loopMatchEsq.current = Animated.loop(
@@ -201,7 +189,7 @@ export default function App() {
       animMatchEsq.setValue(1);
     }
 
-    // 4. Efeito Match Point (Pisca) - Direita
+    // Efeito Match Point (Pisca) - Direita
     if (dados.direita.match) {
       if (!loopMatchDir.current) {
         loopMatchDir.current = Animated.loop(
@@ -228,7 +216,7 @@ export default function App() {
       animMatchDir.setValue(1);
     }
 
-    // 5. Efeito Vitória (Arco-Íris)
+    // Efeito Vitória (Arco-Íris)
     if (dados.jogoFinalizado) {
       if (!loopArcoIris.current) {
         loopArcoIris.current = Animated.loop(
@@ -248,27 +236,6 @@ export default function App() {
       animArcoIris.setValue(0);
     }
   }, [dados]);
-
-  // Despacha os comandos empacotados por dentro do canal ativo de WebSocket (Ignora regras de CORS)
-  const enviarComando = (lado: string, acao: string) => {
-    if (enviandoComando.current) {
-      console.log("Comando bloqueado para evitar sobrecarga.");
-      return;
-    }
-
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      enviandoComando.current = true;
-
-      const payload = JSON.stringify({ comando: true, lado, acao });
-      wsRef.current.send(payload);
-
-      setTimeout(() => {
-        enviandoComando.current = false;
-      }, 500);
-    } else {
-      console.log("WebSocket desconectado. Não foi possível processar.");
-    }
-  };
 
   const formatarNumero = (num: number) => (num < 10 ? `0${num}` : num);
 
@@ -305,125 +272,135 @@ export default function App() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <Stack.Screen options={{ headerShown: false }} />
-      <StatusBar barStyle='light-content' />
+    <View style={styles.containerPai}>
+      {/* Configuração explícita para pintar a barra superior do iOS de preto */}
+      <StatusBar
+        barStyle='light-content'
+        backgroundColor='#121212'
+        translucent={true}
+      />
 
-      <View style={styles.placarContainer}>
-        {/* CONTROLE ESQUERDA (VERMELHO) */}
-        <View style={styles.colunaControle}>
-          <TouchableOpacity
-            style={[styles.botaoMaisMenos, { backgroundColor: "#ff4d4d" }]}
-            onPress={() => enviarComando("esq", "mais")}
-          >
-            <Text style={styles.txtBotao}>+</Text>
-          </TouchableOpacity>
+      <SafeAreaView style={styles.safeArea}>
+        <Stack.Screen options={{ headerShown: false }} />
 
-          <Animated.View
-            style={[
-              styles.visorNumero,
-              {
-                borderColor: dados.esquerda.fogo ? "#ffaa00" : "#ff4d4d",
-                opacity: animMatchEsq,
-                backgroundColor: dados.esquerda.fogo
-                  ? corDeFundoFogoEsq
-                  : "#1e1e1e",
-              },
-            ]}
-          >
-            <Animated.Text
-              style={[styles.numeroPlacar, obterEstiloTextoNumero("esq")]}
+        <View style={styles.placarContainer}>
+          {/* CONTROLE ESQUERDA (VERMELHO) */}
+          <View style={styles.colunaControle}>
+            <TouchableOpacity
+              style={[styles.botaoMaisMenos, { backgroundColor: "#ff4d4d" }]}
+              onPress={() => enviarComando("esq", "mais")}
             >
-              {formatarNumero(dados.esquerda.pontos)}
-            </Animated.Text>
-          </Animated.View>
+              <Text style={styles.txtBotao}>+</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.btnMenos}
-            onPress={() => enviarComando("esq", "menos")}
-          >
-            <Text style={styles.txtBotao}>-</Text>
-          </TouchableOpacity>
+            <Animated.View
+              style={[
+                styles.visorNumero,
+                {
+                  borderColor: dados.esquerda.fogo ? "#ffaa00" : "#ff4d4d",
+                  opacity: animMatchEsq,
+                  backgroundColor: dados.esquerda.fogo
+                    ? corDeFundoFogoEsq
+                    : "#1e1e1e",
+                },
+              ]}
+            >
+              <Animated.Text
+                style={[styles.numeroPlacar, obterEstiloTextoNumero("esq")]}
+              >
+                {formatarNumero(dados.esquerda.pontos)}
+              </Animated.Text>
+            </Animated.View>
+
+            <TouchableOpacity
+              style={styles.btnMenos}
+              onPress={() => enviarComando("esq", "menos")}
+            >
+              <Text style={styles.txtBotao}>-</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* CONTROLE DIREITA (AZUL) */}
+          <View style={styles.colunaControle}>
+            <TouchableOpacity
+              style={[styles.botaoMaisMenos, { backgroundColor: "#3399ff" }]}
+              onPress={() => enviarComando("dir", "mais")}
+            >
+              <Text style={styles.txtBotao}>+</Text>
+            </TouchableOpacity>
+
+            <Animated.View
+              style={[
+                styles.visorNumero,
+                {
+                  borderColor: dados.direita.fogo ? "#ffaa00" : "#3399ff",
+                  opacity: animMatchDir,
+                  backgroundColor: dados.direita.fogo
+                    ? corDeFundoFogoDir
+                    : "#1e1e1e",
+                },
+              ]}
+            >
+              <Animated.Text
+                style={[styles.numeroPlacar, obterEstiloTextoNumero("dir")]}
+              >
+                {formatarNumero(dados.direita.pontos)}
+              </Animated.Text>
+            </Animated.View>
+
+            <TouchableOpacity
+              style={styles.btnMenos}
+              onPress={() => enviarComando("dir", "menos")}
+            >
+              <Text style={styles.txtBotao}>-</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
-        {/* CONTROLE DIREITA (AZUL) */}
-        <View style={styles.colunaControle}>
-          <TouchableOpacity
-            style={[styles.botaoMaisMenos, { backgroundColor: "#3399ff" }]}
-            onPress={() => enviarComando("dir", "mais")}
-          >
-            <Text style={styles.txtBotao}>+</Text>
-          </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.btnReset}
+          onPress={() => enviarComando("reset", "tudo")}
+        >
+          <Text style={styles.txtReset}>ZERAR PLACAR</Text>
+        </TouchableOpacity>
 
-          <Animated.View
-            style={[
-              styles.visorNumero,
-              {
-                borderColor: dados.direita.fogo ? "#ffaa00" : "#3399ff",
-                opacity: animMatchDir,
-                backgroundColor: dados.direita.fogo
-                  ? corDeFundoFogoDir
-                  : "#1e1e1e",
-              },
-            ]}
-          >
-            <Animated.Text
-              style={[styles.numeroPlacar, obterEstiloTextoNumero("dir")]}
-            >
-              {formatarNumero(dados.direita.pontos)}
-            </Animated.Text>
-          </Animated.View>
-
-          <TouchableOpacity
-            style={styles.btnMenos}
-            onPress={() => enviarComando("dir", "menos")}
-          >
-            <Text style={styles.txtBotao}>-</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <TouchableOpacity
-        style={styles.btnReset}
-        onPress={() => enviarComando("reset", "tudo")}
-      >
-        <Text style={styles.txtReset}>ZERAR PLACAR</Text>
-      </TouchableOpacity>
-
-      {/* CANHÕES DE CONFETE NATIVOS */}
-      {dados.jogoFinalizado && (
-        <>
-          <ConfettiCannon
-            ref={canhaoEsquerdo}
-            count={60}
-            origin={{ x: -10, y: 400 }}
-            autoStart={false}
-            fadeOut={true}
-            fallSpeed={2500}
-            explosionSpeed={350}
-            colors={["#ff4d4d", "#ffaa00", "#fff"]}
-          />
-
-          <ConfettiCannon
-            ref={canhaoDireito}
-            count={60}
-            origin={{ x: 400, y: 400 }}
-            autoStart={false}
-            fadeOut={true}
-            fallSpeed={2500}
-            explosionSpeed={350}
-            colors={["#3399ff", "#ffaa00", "#fff"]}
-          />
-        </>
-      )}
-    </SafeAreaView>
+        {/* CANHÕES DE CONFETE NATIVOS */}
+        {dados.jogoFinalizado && (
+          <>
+            <ConfettiCannon
+              ref={canhaoEsquerdo}
+              count={60}
+              origin={{ x: -10, y: 400 }}
+              autoStart={false}
+              fadeOut={true}
+              fallSpeed={2500}
+              explosionSpeed={350}
+              colors={["#ff4d4d", "#ffaa00", "#fff"]}
+            />
+            <ConfettiCannon
+              ref={canhaoDireito}
+              count={60}
+              origin={{ x: 400, y: 400 }}
+              autoStart={false}
+              fadeOut={true}
+              fallSpeed={2500}
+              explosionSpeed={350}
+              colors={["#3399ff", "#ffaa00", "#fff"]}
+            />
+          </>
+        )}
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  containerPai: {
     flex: 1,
-    backgroundColor: "#121212",
+    backgroundColor: "#121212", // Garante que as áreas cegas do iOS fiquem pretas
+  },
+  safeArea: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 50,
@@ -437,12 +414,6 @@ const styles = StyleSheet.create({
   colunaControle: {
     alignItems: "center",
     width: "45%",
-  },
-  labelTime: {
-    fontSize: 16,
-    fontWeight: "bold",
-    marginBottom: 15,
-    letterSpacing: 1,
   },
   visorNumero: {
     width: "100%",

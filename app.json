@@ -13,10 +13,7 @@
       "bundleIdentifier": "com.seuusuario.controleplacar",
       "infoPlist": {
         "NSLocalNetworkUsageDescription": "Precisamos de acesso à rede local para conectar e controlar o placar físico.",
-        "NSBonjourServices": [
-          "_http._tcp.",
-          "_ws._tcp."
-        ],
+        "NSBonjourServices": ["_http._tcp.", "_ws._tcp."],
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true,
           "NSAllowsLocalNetworking": true
@@ -29,6 +26,8 @@
       "backgroundColor": "#121212"
     },
     "android": {
+      "package": "com.denisdias.placarmp3",
+      "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#007D77"
@@ -40,6 +39,8 @@
     "web": {
       "output": "static",
       "favicon": "./assets/icon.png",
+      "backgroundColor": "#121212",
+      "themeColor": "#121212",
       "pwa": {
         "enabled": true,
         "name": "Controle de Placar",
