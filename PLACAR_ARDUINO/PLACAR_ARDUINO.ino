@@ -51,10 +51,17 @@ byte calorEsq[NUM_LEDS];
 byte calorDir[NUM_LEDS];
 unsigned long tempoFogo = 0;
 
-unsigned long tempoPiscaEspera = 0;
-bool estadoLedsEspera = false; 
-const int ledsParaPiscar[] = {5, 6, 8, 9, 14, 15, 17, 18};
-const int qtdLedsParaPiscar = sizeof(ledsParaPiscar) / sizeof(ledsParaPiscar[0]);
+// --- CONFIGURAÇÃO DA NOVA ANIMAÇÃO DE ESPERA (SNAKE) ---
+const int sequenciaSnake[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 0, 1, 2, 20, 19, 18, 17, 16, 15, 14, 12, 0, 1, 2};
+const int tamanhoSnakeSeq = sizeof(sequenciaSnake) / sizeof(sequenciaSnake[0]);
+const int comprimentoSnakeBody = 4; // Quantidade de LEDs acesos simultaneamente se deslocando
+
+unsigned long tempoSnakeAtualizacao = 0;
+int frameSnake = 0;
+int displayAtivoSnake = 0; // 0=Esq Dez, 1=Esq Uni, 2=Dir Dez, 3=Dir Uni
+
+// Array de ponteiros para referenciar dinamicamente os displays no loop
+Adafruit_NeoPixel* fitasSnake[] = {&fitaEsqDezena, &fitaEsqUnidade, &fitaDirDezena, &fitaDirUnidade};
 
 unsigned long tempoUltimoBroadcastEfeito = 0;
 
@@ -86,7 +93,6 @@ void renderizarDigitoIntel(Adafruit_NeoPixel &fita, int numero, uint32_t cor, in
     return; 
   }
   
-  max(0,1); // Dummy expression safe for compiler
   ultNum = numero;
   ultCor = cor;
   
@@ -94,7 +100,6 @@ void renderizarDigitoIntel(Adafruit_NeoPixel &fita, int numero, uint32_t cor, in
   if (numero >= 0 && numero <= 9) {
     for (int grupo = 0; grupo < TOTAL_GRUPOS; grupo++) {
       if (mapeamentoNumeros[numero][grupo] == 1) {
-        int ledInicial = grupo * LEDS_POR_GRUPO; // Note: using grouping calculation
         int ledInicialCalculado = grupo * LEDS_POR_GRUPO;
         int ledFinal = ledInicialCalculado + LEDS_POR_GRUPO;
         for (int i = ledInicialCalculado; i < ledFinal; i++) {
@@ -144,35 +149,62 @@ void executarIntroConexao() {
   transmitirEstadoGeral();
 }
 
-void rodarAnimacaoEsperaFixa() {
+void desenharSegmentoSnake(Adafruit_NeoPixel &fita, int frame, uint32_t cor) {
+  fita.clear();
+  for (int i = 0; i < comprimentoSnakeBody; i++) {
+    int idxNaSeq = (frame + i) % tamanhoSnakeSeq;
+    int ledFisico = sequenciaSnake[idxNaSeq];
+    fita.setPixelColor(ledFisico, cor);
+  }
+  fita.show();
+}
+
+void rodarAnimacaoSnake() {
   unsigned long tempoAtual = millis();
-  if (tempoAtual - tempoPiscaEspera >= 500) { 
-    tempoPiscaEspera = tempoAtual;
-    estadoLedsEspera = !estadoLedsEspera;
+  const int velocidadeSnake = 60; // Ajuste para acelerar ou desacelerar a cobrinha
+  
+  if (tempoAtual - tempoSnakeAtualizacao >= velocidadeSnake) {
+    tempoSnakeAtualizacao = tempoAtual;
+    uint32_t corSnakeVerde = Adafruit_NeoPixel::Color(0, 255, 0);
 
-    fitaEsqDezena.clear();  fitaEsqUnidade.clear();
-    fitaDirDezena.clear();  fitaDirUnidade.clear();
+    // Limpa todas as matrizes para garantir isolamento visual
+    fitaEsqDezena.clear(); fitaEsqUnidade.clear();
+    fitaDirDezena.clear(); fitaDirUnidade.clear();
 
-    if (estadoLedsEspera) {
-      uint32_t corVerdeEspera = fitaEsqUnidade.Color(0, 255, 0);
-      for (int i = 0; i < qtdLedsParaPiscar; i++) {
-        int idxLed = ledsParaPiscar[i];
-        fitaEsqDezena.setPixelColor(idxLed, corVerdeEspera);
-        fitaEsqUnidade.setPixelColor(idxLed, corVerdeEspera);
-        fitaDirDezena.setPixelColor(idxLed, corVerdeEspera);
-        fitaDirUnidade.setPixelColor(idxLed, corVerdeEspera);
+    // Executa a cobrinha unicamente no display ativo da iteração
+    desenharSegmentoSnake(*fitasSnake[displayAtivoSnake], frameSnake, corSnakeVerde);
+
+    // Atualiza o estado de saídas das demais fitas para mantê-las apagadas
+    for(int d = 0; d < 4; d++) {
+      if(d != displayAtivoSnake) {
+        fitasSnake[d]->show();
       }
     }
-    fitaEsqDezena.show();  fitaEsqUnidade.show();
-    fitaDirDezena.show();  fitaDirUnidade.show();
+
+    frameSnake++;
+
+    // Quando o frame finaliza a extensão completa da sequência, passa para o próximo dígito
+    if (frameSnake >= tamanhoSnakeSeq) {
+      frameSnake = 0;
+      displayAtivoSnake = (displayAtivoSnake + 1) % 4;
+    }
     yield(); 
   }
 }
 
+// Lado Esquerdo: Efeito de fogo em degradê clássico (Vermelho/Laranja)
 uint32_t calcularCorFogo(byte calor) {
   byte r = map(calor, 0, 255, 0, 255);
   byte g = map(calor, 0, 255, 0, 105); 
   return Adafruit_NeoPixel::Color(r, g, 0);
+}
+
+// Lado Direito: Efeito de fogo estilizado em tons frios (Azul/Ciano)
+uint32_t calcularCorFogoDir(byte calor) {
+  byte r = 0; 
+  byte g = map(calor, 0, 255, 0, 160); 
+  byte b = map(calor, 0, 255, 45, 255); 
+  return Adafruit_NeoPixel::Color(r, g, b);
 }
 
 void processarFogoNoDigito(Adafruit_NeoPixel &fita, byte *calorArray, int numero) {
@@ -197,6 +229,35 @@ void processarFogoNoDigito(Adafruit_NeoPixel &fita, byte *calorArray, int numero
         int ledFinal = ledInicial + LEDS_POR_GRUPO;
         for (int i = ledInicial; i < ledFinal; i++) {
           fita.setPixelColor(i, calcularCorFogo(calorArray[i]));
+        }
+      }
+    }
+  }
+  fita.show();
+}
+
+void processarFogoNoDigitoDir(Adafruit_NeoPixel &fita, byte *calorArray, int numero) {
+  for (int i = 0; i < NUM_LEDS; i++) {
+    int decremento = random(0, 16);
+    calorArray[i] = (calorArray[i] > decremento) ? calorArray[i] - decremento : 0;
+  }
+  for (int k = NUM_LEDS - 1; k >= 2; k--) {
+    calorArray[k] = (calorArray[k - 1] + calorArray[k - 2] + calorArray[k - 2]) / 3;
+  }
+  if (random(255) < 85) {
+    int m = random(0, 4);
+    int incremento = random(160, 256);
+    calorArray[m] = (calorArray[m] + incremento > 255) ? 255 : calorArray[m] + incremento;
+  }
+
+  fita.clear();
+  if (numero >= 0 && numero <= 9) {
+    for (int grupo = 0; grupo < TOTAL_GRUPOS; grupo++) {
+      if (mapeamentoNumeros[numero][grupo] == 1) {
+        int ledInicial = grupo * LEDS_POR_GRUPO;
+        int ledFinal = ledInicial + LEDS_POR_GRUPO;
+        for (int i = ledInicial; i < ledFinal; i++) {
+          fita.setPixelColor(i, calcularCorFogoDir(calorArray[i]));
         }
       }
     }
@@ -284,8 +345,8 @@ void gerenciarEfeitosEVisores() {
   } 
   else if (fogoDirAtivo) {
     if (tempoAtual - tempoFogo >= 35) {
-      processarFogoNoDigito(fitaDirDezena, calorDir, pontosDir / 10);
-      processarFogoNoDigito(fitaDirUnidade, calorDir, pontosDir % 10);
+      processarFogoNoDigitoDir(fitaDirDezena, calorDir, pontosDir / 10);
+      processarFogoNoDigitoDir(fitaDirUnidade, calorDir, pontosDir % 10);
     }
     ultNumDirDez = -1; ultNumDirUni = -1;
   } 
@@ -306,7 +367,6 @@ void checarRegrasDeVitoria() {
   else if (pontosDir >= 15 && (pontosDir - pontosEsq) >= 2) { jogoFinalizado = true; vencedor = 2; }
 }
 
-// Lógica de processamento centralizada (Chamada internamente pelo WebSocket ou HTTP)
 void executarComandoLozico(String lado, String acao) {
   if (jogoFinalizado && lado != "reset") return;
   unsigned long tempoAtual = millis();
@@ -338,7 +398,6 @@ void executarComandoLozico(String lado, String acao) {
 }
 
 void handleStatus() {
-  // Libera acesso para qualquer origem (inclusive o app rodando na Vercel)
   server.sendHeader("Access-Control-Allow-Origin", "*");
   server.sendHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   server.sendHeader("Access-Control-Allow-Headers", "*");
@@ -359,7 +418,6 @@ void handleStatus() {
 }
 
 void handleControle() {
-  // Cabeçalhos de segurança cruciais para o PWA do iOS aceitar a resposta
   server.sendHeader("Access-Control-Allow-Origin", "*");
   server.sendHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   server.sendHeader("Access-Control-Allow-Headers", "*");
@@ -369,16 +427,13 @@ void handleControle() {
     return; 
   }
 
-  // 1. Executa a lógica física (muda os LEDs)
   executarComandoLozico(server.arg("lado"), server.arg("acao"));
 
-  // 2. Calcula os estados visuais para devolver ao App na resposta
   bool esqEmMatch = (pontosEsq >= 14 && pontosEsq > pontosDir && !jogoFinalizado);
   bool dirEmMatch = (pontosDir >= 14 && pontosDir > pontosEsq && !jogoFinalizado);
   bool fogoEsqAtivo = (consecutivasEsq >= 3 && !jogoFinalizado);
   bool fogoDirAtivo = (consecutivasDir >= 3 && !jogoFinalizado);
 
-  // 3. Monta o JSON atualizado do jogo
   String json = "{";
   json += "\"esquerda\":{\"pontos\":" + String(pontosEsq) + ",\"fogo\":" + String(fogoEsqAtivo ? "true" : "false") + ",\"match\":" + String(esqEmMatch ? "true" : "false") + "},";
   json += "\"direita\":{\"pontos\":" + String(pontosDir) + ",\"fogo\":" + String(fogoDirAtivo ? "true" : "false") + ",\"match\":" + String(dirEmMatch ? "true" : "false") + "},";
@@ -386,11 +441,9 @@ void handleControle() {
   json += "\"vencedor\":" + String(vencedor);
   json += "}";
 
-  // 4. Envia os dados novos direto na resposta do clique
   server.send(200, "application/json", json);
 }
 
-// Manipulador unificado de eventos WebSocket (Lê os comandos JSON do PWA)
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length) {
   switch (type) {
     case WStype_CONNECTED:
@@ -447,7 +500,7 @@ void loop() {
 
   if (dispositivosConectados == 0) {
     alguemConectadoAnteriormente = false;
-    rodarAnimacaoEsperaFixa();
+    rodarAnimacaoSnake();
   } 
   else {
     if (!alguemConectadoAnteriormente) {

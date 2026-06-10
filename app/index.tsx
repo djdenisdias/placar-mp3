@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  Vibration,
   View,
 } from "react-native";
 import ConfettiCannon from "react-native-confetti-cannon";
@@ -42,23 +43,21 @@ export default function App() {
   const loopMatchDir = useRef<Animated.CompositeAnimation | null>(null);
   const loopArcoIris = useRef<Animated.CompositeAnimation | null>(null);
 
-  // Dispara a festa de confetes quando o jogo for finalizado
+  // Efeito de Fim de Jogo: Confete e Vibração
   useEffect(() => {
     if (dados.jogoFinalizado) {
-      console.log("🏆 Partida finalizada! Disparando confetes...");
+      console.log("🏆 Partida finalizada!");
+
+      // Faz o celular vibrar por 1 segundo
+      Vibration.vibrate(1000);
+
+      // Dispara os canhões uma única vez
       canhaoEsquerdo.current?.start();
       canhaoDireito.current?.start();
-
-      const timerSegundaLeva = setTimeout(() => {
-        canhaoEsquerdo.current?.start();
-        canhaoDireito.current?.start();
-      }, 400);
-
-      return () => clearTimeout(timerSegundaLeva);
     }
   }, [dados.jogoFinalizado]);
 
-  // 1. Carrega o estado atual do placar APENAS UMA VEZ ao abrir o app
+  // Carrega o estado inicial ao abrir o app
   useEffect(() => {
     const carregarEstadoInicial = async () => {
       try {
@@ -71,13 +70,13 @@ export default function App() {
           setDados(json);
         }
       } catch (err) {
-        console.log("Aguardando conexão Wi-Fi com o placar físico...");
+        console.log("Aguardando conexão Wi-Fi com o placar...");
       }
     };
     carregarEstadoInicial();
   }, []);
 
-  // 2. Envia a ação e captura o estado atualizado imediatamente na resposta (Sem Polling!)
+  // Envia comando e sincroniza com a resposta JSON do Arduino
   const enviarComando = async (lado: string, acao: string) => {
     if (enviandoComando.current) return;
     enviandoComando.current = true;
@@ -87,28 +86,26 @@ export default function App() {
         `${API_URL}/controlar?lado=${lado}&acao=${acao}`,
         {
           method: "GET",
-          mode: "cors", // Permite a leitura do JSON retornado no PWA do iOS
+          mode: "cors",
         },
       );
 
       if (resposta.ok) {
         const jsonAtualizado = await resposta.json();
-        // Sincroniza o estado do app com o retorno real do Arduino
         setDados(jsonAtualizado);
-        console.log(`Sucesso: ${lado} -> ${acao}`, jsonAtualizado);
       }
     } catch (err) {
       console.log("Erro ao processar comando via HTTP:", err);
     } finally {
       setTimeout(() => {
         enviandoComando.current = false;
-      }, 200); // Evita cliques duplicados acidentais
+      }, 200);
     }
   };
 
-  // Controle dos Loops de Animação
+  // Gerenciamento dos Loops de Animação
   useEffect(() => {
-    // Efeito Chamas (Fogo) - Esquerda
+    // Fogo Esquerda
     if (dados.esquerda.fogo) {
       if (!loopFogoEsq.current) {
         loopFogoEsq.current = Animated.loop(
@@ -135,7 +132,7 @@ export default function App() {
       animFogoEsq.setValue(0);
     }
 
-    // Efeito Chamas (Fogo) - Direita
+    // Fogo Direita
     if (dados.direita.fogo) {
       if (!loopFogoDir.current) {
         loopFogoDir.current = Animated.loop(
@@ -162,7 +159,7 @@ export default function App() {
       animFogoDir.setValue(0);
     }
 
-    // Efeito Match Point (Pisca) - Esquerda
+    // Match Point Esquerda
     if (dados.esquerda.match) {
       if (!loopMatchEsq.current) {
         loopMatchEsq.current = Animated.loop(
@@ -189,7 +186,7 @@ export default function App() {
       animMatchEsq.setValue(1);
     }
 
-    // Efeito Match Point (Pisca) - Direita
+    // Match Point Direita
     if (dados.direita.match) {
       if (!loopMatchDir.current) {
         loopMatchDir.current = Animated.loop(
@@ -216,7 +213,7 @@ export default function App() {
       animMatchDir.setValue(1);
     }
 
-    // Efeito Vitória (Arco-Íris)
+    // Vitória (Arco-Íris) - Roda se jogoFinalizado for true
     if (dados.jogoFinalizado) {
       if (!loopArcoIris.current) {
         loopArcoIris.current = Animated.loop(
@@ -247,7 +244,7 @@ export default function App() {
 
   const corDeFundoFogoDir = animFogoDir.interpolate({
     inputRange: [0, 1],
-    outputRange: ["rgba(51, 153, 255, 0.15)", "rgba(255, 165, 0, 0.4)"],
+    outputRange: ["rgba(0, 50, 150, 0.15)", "rgba(0, 255, 255, 0.4)"],
   });
 
   const corTextoArcoIris = animArcoIris.interpolate({
@@ -267,32 +264,56 @@ export default function App() {
       return { color: corTextoArcoIris };
     }
     if (lado === "esq" && dados.esquerda.fogo) return { color: "#ffaa00" };
-    if (lado === "dir" && dados.direita.fogo) return { color: "#ffaa00" };
+    if (lado === "dir" && dados.direita.fogo) return { color: "#00ffff" };
     return { color: "#fff" };
+  };
+
+  const sincronizarPlacar = async () => {
+    try {
+      const resposta = await fetch(`${API_URL}/status`, {
+        method: "GET",
+        headers: { "Cache-Control": "no-cache" },
+      });
+
+      if (resposta.ok) {
+        const jsonAtualizado = await resposta.json();
+        setDados(jsonAtualizado); // Força o App a engolir o que está no Arduino
+        console.log("Placar sincronizado com sucesso!", jsonAtualizado);
+      }
+    } catch (err) {
+      console.log("Não foi possível sincronizar. Placar offline.");
+    }
   };
 
   return (
     <View style={styles.containerPai}>
-      {/* Configuração explícita para pintar a barra superior do iOS de preto */}
       <StatusBar
         barStyle='light-content'
         backgroundColor='#121212'
         translucent={true}
       />
-
       <SafeAreaView style={styles.safeArea}>
         <Stack.Screen options={{ headerShown: false }} />
 
+        <TouchableOpacity
+          style={styles.btnSincronizar}
+          onPress={() => sincronizarPlacar()}
+        >
+          <Text style={styles.txtReset}>SINCRONIZAR</Text>
+        </TouchableOpacity>
+
         <View style={styles.placarContainer}>
-          {/* CONTROLE ESQUERDA (VERMELHO) */}
+          {/* LADO ESQUERDO */}
           <View style={styles.colunaControle}>
+            <Text style={[styles.labelTime, { color: "#ff4d4d" }]}>
+              {dados.esquerda.match ? "MATCH POINT" : "ESQUERDA"}
+            </Text>
             <TouchableOpacity
               style={[styles.botaoMaisMenos, { backgroundColor: "#ff4d4d" }]}
               onPress={() => enviarComando("esq", "mais")}
             >
               <Text style={styles.txtBotao}>+</Text>
             </TouchableOpacity>
-
             <Animated.View
               style={[
                 styles.visorNumero,
@@ -311,7 +332,6 @@ export default function App() {
                 {formatarNumero(dados.esquerda.pontos)}
               </Animated.Text>
             </Animated.View>
-
             <TouchableOpacity
               style={styles.btnMenos}
               onPress={() => enviarComando("esq", "menos")}
@@ -320,20 +340,22 @@ export default function App() {
             </TouchableOpacity>
           </View>
 
-          {/* CONTROLE DIREITA (AZUL) */}
+          {/* LADO DIREITO */}
           <View style={styles.colunaControle}>
+            <Text style={[styles.labelTime, { color: "#3399ff" }]}>
+              {dados.direita.match ? "MATCH POINT" : "DIREITA"}
+            </Text>
             <TouchableOpacity
               style={[styles.botaoMaisMenos, { backgroundColor: "#3399ff" }]}
               onPress={() => enviarComando("dir", "mais")}
             >
               <Text style={styles.txtBotao}>+</Text>
             </TouchableOpacity>
-
             <Animated.View
               style={[
                 styles.visorNumero,
                 {
-                  borderColor: dados.direita.fogo ? "#ffaa00" : "#3399ff",
+                  borderColor: dados.direita.fogo ? "#00ffff" : "#3399ff",
                   opacity: animMatchDir,
                   backgroundColor: dados.direita.fogo
                     ? corDeFundoFogoDir
@@ -347,7 +369,6 @@ export default function App() {
                 {formatarNumero(dados.direita.pontos)}
               </Animated.Text>
             </Animated.View>
-
             <TouchableOpacity
               style={styles.btnMenos}
               onPress={() => enviarComando("dir", "menos")}
@@ -361,10 +382,21 @@ export default function App() {
           style={styles.btnReset}
           onPress={() => enviarComando("reset", "tudo")}
         >
-          <Text style={styles.txtReset}>ZERAR PLACAR</Text>
+          {/* O Texto "ZERAR PLACAR" agora herda a animação arco-íris se o jogo terminou */}
+          <Animated.Text
+            style={[
+              styles.txtReset,
+              dados.jogoFinalizado && {
+                color: corTextoArcoIris,
+                fontWeight: "bold",
+                fontSize: 16,
+              },
+            ]}
+          >
+            ZERAR PLACAR
+          </Animated.Text>
         </TouchableOpacity>
 
-        {/* CANHÕES DE CONFETE NATIVOS */}
         {dados.jogoFinalizado && (
           <>
             <ConfettiCannon
@@ -374,8 +406,6 @@ export default function App() {
               autoStart={false}
               fadeOut={true}
               fallSpeed={2500}
-              explosionSpeed={350}
-              colors={["#ff4d4d", "#ffaa00", "#fff"]}
             />
             <ConfettiCannon
               ref={canhaoDireito}
@@ -384,8 +414,6 @@ export default function App() {
               autoStart={false}
               fadeOut={true}
               fallSpeed={2500}
-              explosionSpeed={350}
-              colors={["#3399ff", "#ffaa00", "#fff"]}
             />
           </>
         )}
@@ -395,15 +423,19 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  containerPai: {
-    flex: 1,
-    backgroundColor: "#121212", // Garante que as áreas cegas do iOS fiquem pretas
-  },
+  containerPai: { flex: 1, backgroundColor: "#121212" },
   safeArea: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 50,
+  },
+  titulo: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#fff",
+    letterSpacing: 2,
+    marginTop: 10,
   },
   placarContainer: {
     flexDirection: "row",
@@ -411,9 +443,12 @@ const styles = StyleSheet.create({
     justifyContent: "space-around",
     paddingHorizontal: 10,
   },
-  colunaControle: {
-    alignItems: "center",
-    width: "45%",
+  colunaControle: { alignItems: "center", width: "45%" },
+  labelTime: {
+    fontSize: 16,
+    fontWeight: "bold",
+    marginBottom: 15,
+    letterSpacing: 1,
   },
   visorNumero: {
     width: "100%",
@@ -423,16 +458,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginVertical: 15,
     borderWidth: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
     elevation: 5,
   },
-  numeroPlacar: {
-    fontSize: 60,
-    fontWeight: "bold",
-  },
+  numeroPlacar: { fontSize: 60, fontWeight: "bold" },
   botaoMaisMenos: {
     width: "80%",
     height: 55,
@@ -448,11 +476,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  txtBotao: {
-    color: "#fff",
-    fontSize: 28,
-    fontWeight: "bold",
-  },
+  txtBotao: { color: "#fff", fontSize: 28, fontWeight: "bold" },
   btnReset: {
     backgroundColor: "#1e1e1e",
     paddingHorizontal: 50,
@@ -468,5 +492,15 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     fontSize: 14,
     letterSpacing: 1,
+  },
+  btnSincronizar: {
+    backgroundColor: "#1e1e1e",
+    paddingHorizontal: 50,
+    paddingVertical: 15,
+    borderRadius: 25,
+    borderWidth: 1,
+    borderColor: "#444",
+    position: "absolute",
+    top: 100,
   },
 });
