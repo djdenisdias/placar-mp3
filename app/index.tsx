@@ -25,7 +25,17 @@ export default function App() {
 
   const enviandoComando = useRef(false);
 
-  // Referências para as animações nativas
+  // Estados para controlar o texto de rotação do vôlei
+  const [sacador, setSacador] = useState<"esq" | "dir" | null>(null);
+  const [statusRotacao, setStatusRotacao] = useState({
+    esq: "",
+    dir: "",
+  });
+
+  // Guarda os pontos da renderização anterior para saber quem pontuou
+  const pontosAnteriores = useRef({ esq: 0, dir: 0 });
+
+  // Referências para las animações nativas
   const animFogoEsq = useRef(new Animated.Value(0)).current;
   const animFogoDir = useRef(new Animated.Value(0)).current;
   const animMatchEsq = useRef(new Animated.Value(1)).current;
@@ -42,6 +52,54 @@ export default function App() {
   const loopMatchEsq = useRef<Animated.CompositeAnimation | null>(null);
   const loopMatchDir = useRef<Animated.CompositeAnimation | null>(null);
   const loopArcoIris = useRef<Animated.CompositeAnimation | null>(null);
+
+  // Lógica de Rotação do Vôlei baseada na mudança de pontos
+  useEffect(() => {
+    const esqAtual = dados.esquerda.pontos;
+    const dirAtual = dados.direita.pontos;
+    const esqAntigo = pontosAnteriores.current.esq;
+    const dirAntigo = pontosAnteriores.current.dir;
+
+    // Caso o placar tenha sido resetado
+    if (esqAtual === 0 && dirAtual === 0) {
+      setSacador(null);
+      setStatusRotacao({ esq: "", dir: "" });
+      pontosAnteriores.current = { esq: 0, dir: 0 };
+      return;
+    }
+
+    // Identifica quem fez o ponto
+    if (esqAtual > esqAntigo) {
+      // Ponto da Esquerda!
+      // Se for o PRIMEIRO ponto do lado esquerdo (saiu do zero), NUNCA roda
+      if (esqAntigo === 0) {
+        setStatusRotacao({ esq: "NÃO RODAR", dir: "NÃO RODAR" });
+      } else if (sacador === "dir") {
+        // Roubou o saque (Side-out) -> Precisa rodar
+        setStatusRotacao({ esq: "RODAR", dir: "NÃO RODAR" });
+      } else {
+        // Já estava sacando -> Não roda
+        setStatusRotacao({ esq: "NÃO RODAR", dir: "NÃO RODAR" });
+      }
+      setSacador("esq");
+    } else if (dirAtual > dirAntigo) {
+      // Ponto da Direita!
+      // Se for o PRIMEIRO ponto do lado direito (saiu do zero), NUNCA roda
+      if (dirAntigo === 0) {
+        setStatusRotacao({ esq: "NÃO RODAR", dir: "NÃO RODAR" });
+      } else if (sacador === "esq") {
+        // Roubou o saque (Side-out) -> Precisa rodar
+        setStatusRotacao({ esq: "NÃO RODAR", dir: "RODAR" });
+      } else {
+        // Já estava sacando -> Não roda
+        setStatusRotacao({ esq: "NÃO RODAR", dir: "NÃO RODAR" });
+      }
+      setSacador("dir");
+    }
+
+    // Atualiza a referência com os valores atuais para o próximo ponto
+    pontosAnteriores.current = { esq: esqAtual, dir: dirAtual };
+  }, [dados.esquerda.pontos, dados.direita.pontos]);
 
   // Efeito de Fim de Jogo: Confete e Vibração
   useEffect(() => {
@@ -268,23 +326,6 @@ export default function App() {
     return { color: "#fff" };
   };
 
-  const sincronizarPlacar = async () => {
-    try {
-      const resposta = await fetch(`${API_URL}/status`, {
-        method: "GET",
-        headers: { "Cache-Control": "no-cache" },
-      });
-
-      if (resposta.ok) {
-        const jsonAtualizado = await resposta.json();
-        setDados(jsonAtualizado); // Força o App a engolir o que está no Arduino
-        console.log("Placar sincronizado com sucesso!", jsonAtualizado);
-      }
-    } catch (err) {
-      console.log("Não foi possível sincronizar. Placar offline.");
-    }
-  };
-
   return (
     <View style={styles.containerPai}>
       <StatusBar
@@ -294,22 +335,14 @@ export default function App() {
       />
       <SafeAreaView style={styles.safeArea}>
         <Stack.Screen options={{ headerShown: false }} />
-
-        <TouchableOpacity
-          style={styles.btnSincronizar}
-          onPress={() => sincronizarPlacar()}
-        >
-          <Text style={styles.txtReset}>SINCRONIZAR</Text>
-        </TouchableOpacity>
-
         <View style={styles.placarContainer}>
           {/* LADO ESQUERDO */}
           <View style={styles.colunaControle}>
-            <Text style={[styles.labelTime, { color: "#ff4d4d" }]}>
-              {dados.esquerda.match ? "MATCH POINT" : "ESQUERDA"}
+            <Text style={[styles.labelTime, { color: "#3399ff" }]}>
+              {dados.esquerda.match ? "MATCH POINT" : statusRotacao.esq}
             </Text>
             <TouchableOpacity
-              style={[styles.botaoMaisMenos, { backgroundColor: "#ff4d4d" }]}
+              style={[styles.botaoMaisMenos, { backgroundColor: "#3399ff" }]}
               onPress={() => enviarComando("esq", "mais")}
             >
               <Text style={styles.txtBotao}>+</Text>
@@ -318,7 +351,7 @@ export default function App() {
               style={[
                 styles.visorNumero,
                 {
-                  borderColor: dados.esquerda.fogo ? "#ffaa00" : "#ff4d4d",
+                  borderColor: dados.esquerda.fogo ? "#00ffff" : "#3399ff",
                   opacity: animMatchEsq,
                   backgroundColor: dados.esquerda.fogo
                     ? corDeFundoFogoEsq
@@ -342,11 +375,11 @@ export default function App() {
 
           {/* LADO DIREITO */}
           <View style={styles.colunaControle}>
-            <Text style={[styles.labelTime, { color: "#3399ff" }]}>
-              {dados.direita.match ? "MATCH POINT" : "DIREITA"}
+            <Text style={[styles.labelTime, { color: "#ff4d4d" }]}>
+              {dados.direita.match ? "MATCH POINT" : statusRotacao.dir}
             </Text>
             <TouchableOpacity
-              style={[styles.botaoMaisMenos, { backgroundColor: "#3399ff" }]}
+              style={[styles.botaoMaisMenos, { backgroundColor: "#ff4d4d" }]}
               onPress={() => enviarComando("dir", "mais")}
             >
               <Text style={styles.txtBotao}>+</Text>
@@ -355,7 +388,7 @@ export default function App() {
               style={[
                 styles.visorNumero,
                 {
-                  borderColor: dados.direita.fogo ? "#00ffff" : "#3399ff",
+                  borderColor: dados.direita.fogo ? "#ffaa00" : "#ff4d4d",
                   opacity: animMatchDir,
                   backgroundColor: dados.direita.fogo
                     ? corDeFundoFogoDir
@@ -382,7 +415,6 @@ export default function App() {
           style={styles.btnReset}
           onPress={() => enviarComando("reset", "tudo")}
         >
-          {/* O Texto "ZERAR PLACAR" agora herda a animação arco-íris se o jogo terminou */}
           <Animated.Text
             style={[
               styles.txtReset,
@@ -399,22 +431,25 @@ export default function App() {
 
         {dados.jogoFinalizado && (
           <>
-            <ConfettiCannon
-              ref={canhaoEsquerdo}
-              count={60}
-              origin={{ x: -10, y: 400 }}
-              autoStart={false}
-              fadeOut={true}
-              fallSpeed={2500}
-            />
-            <ConfettiCannon
-              ref={canhaoDireito}
-              count={60}
-              origin={{ x: 400, y: 400 }}
-              autoStart={false}
-              fadeOut={true}
-              fallSpeed={2500}
-            />
+            {dados.vencedor === 1 ? (
+              <ConfettiCannon
+                ref={canhaoEsquerdo}
+                count={60}
+                origin={{ x: -10, y: 400 }}
+                autoStart={false}
+                fadeOut={true}
+                fallSpeed={2500}
+              />
+            ) : (
+              <ConfettiCannon
+                ref={canhaoDireito}
+                count={60}
+                origin={{ x: 400, y: 400 }}
+                autoStart={false}
+                fadeOut={true}
+                fallSpeed={2500}
+              />
+            )}
           </>
         )}
       </SafeAreaView>
@@ -449,6 +484,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     marginBottom: 15,
     letterSpacing: 1,
+    height: 20, // Altura fixa reservada para evitar que o layout pule ao preencher o texto
   },
   visorNumero: {
     width: "100%",
@@ -492,15 +528,5 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     fontSize: 14,
     letterSpacing: 1,
-  },
-  btnSincronizar: {
-    backgroundColor: "#1e1e1e",
-    paddingHorizontal: 50,
-    paddingVertical: 15,
-    borderRadius: 25,
-    borderWidth: 1,
-    borderColor: "#444",
-    position: "absolute",
-    top: 100,
   },
 });

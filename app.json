@@ -13,17 +13,17 @@
       "bundleIdentifier": "com.seuusuario.controleplacar",
       "infoPlist": {
         "NSLocalNetworkUsageDescription": "Precisamos de acesso à rede local para conectar e controlar o placar físico.",
-        "NSBonjourServices": ["_http._tcp.", "_ws._tcp."],
+        "NSBonjourServices": [
+          "_http._tcp.",
+          "_ws._tcp.",
+          "_http._tcp.",
+          "_ws._tcp."
+        ],
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true,
           "NSAllowsLocalNetworking": true
         }
       }
-    },
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#121212"
     },
     "android": {
       "package": "com.denisdias.placarmp3",
@@ -33,14 +33,13 @@
         "backgroundColor": "#007D77"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false,
-      "package": "com.denisdias.placarmp3"
+      "predictiveBackGestureEnabled": false
     },
     "web": {
       "output": "static",
       "favicon": "./assets/icon.png",
-      "backgroundColor": "#121212",
-      "themeColor": "#121212",
+      "backgroundColor": "#007D77",
+      "themeColor": "#007D77",
       "pwa": {
         "enabled": true,
         "name": "Controle de Placar",
@@ -77,6 +76,12 @@
       "eas": {
         "projectId": "ee7a500f-a79d-40c4-b76f-5050bcd3ca73"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/ee7a500f-a79d-40c4-b76f-5050bcd3ca73"
     }
   }
 }
