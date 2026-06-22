@@ -484,7 +484,7 @@ void setup() {
   WiFi.disconnect(true);
   
   fita.begin();  
-  fita.setBrightness(200);
+  fita.setBrightness(80);
   fita.show(); 
 
   reiniciarAccessPoint();

@@ -321,8 +321,8 @@ export default function App() {
     if (dados.jogoFinalizado && dados.vencedor === (lado === "esq" ? 1 : 2)) {
       return { color: corTextoArcoIris };
     }
-    if (lado === "esq" && dados.esquerda.fogo) return { color: "#ffaa00" };
-    if (lado === "dir" && dados.direita.fogo) return { color: "#00ffff" };
+    if (lado === "esq" && dados.esquerda.fogo) return { color: "#00ffff" };
+    if (lado === "dir" && dados.direita.fogo) return { color: "#ffaa00" };
     return { color: "#fff" };
   };
 
